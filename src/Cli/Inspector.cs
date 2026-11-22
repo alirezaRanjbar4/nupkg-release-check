@@ -106,8 +106,14 @@ public static class Inspector
 
             var readme = Value("readme");
             if (string.IsNullOrWhiteSpace(readme)) findings.Add(new("NRC005", "warning", manifest.FullName, null, "Readme metadata is missing."));
-            else if (!Resolve(manifest.FullName, readme.Replace('\\', '/'), out var readmeTarget) || readmeTarget is null || !files.ContainsKey(readmeTarget))
-                Error("NRC005", manifest.FullName, "Declared readme is not a package-local archive file.");
+            else
+            {
+                // Nuspec readme is an archive path, not a URL: preserve literal % and #.
+                var readmeTarget = readme.Replace('\\', '/');
+                while (readmeTarget.StartsWith("./", StringComparison.Ordinal)) readmeTarget = readmeTarget[2..];
+                if (!SafeArchivePath(readmeTarget) || !files.ContainsKey(readmeTarget))
+                    Error("NRC005", manifest.FullName, "Declared readme is not a package-local archive file.");
+            }
 
             foreach (var entry in files.Values.Where(entry => entry.FullName.EndsWith(".md", StringComparison.OrdinalIgnoreCase)).OrderBy(entry => entry.FullName, StringComparer.Ordinal))
             {
@@ -124,9 +130,9 @@ public static class Inspector
                     if (string.IsNullOrEmpty(url) || url.StartsWith('#') || url.StartsWith('/') || Uri.TryCreate(url, UriKind.Absolute, out _)) continue;
                     linkCount++;
                     if (linkCount > MaxLinks) { Error("NRC007", entry.FullName, "Package exceeds the 100,000-link inspection limit."); return Report(); }
-                    if (!Resolve(entry.FullName, url, out var target))
+                    if (!Resolve(entry.FullName, url, out var target, out var requiresDirectory))
                         Error("NRC006", entry.FullName, "Relative Markdown target escapes the package root or uses an unsupported path.", link.Line + 1);
-                    else if (target is not null && !files.ContainsKey(target) && !directories.Contains(target))
+                    else if (target is not null && !directories.Contains(target) && (requiresDirectory || !files.ContainsKey(target)))
                         Error("NRC006", entry.FullName, "Relative Markdown target is missing from the archive (case-sensitive).", link.Line + 1, target);
                 }
             }
@@ -157,9 +163,10 @@ public static class Inspector
         !path.Any(c => char.IsControl(c) || "<>:\\|?*".Contains(c)) &&
         path.Split('/').All(segment => segment.Length > 0 && segment is not ("." or ".."));
 
-    private static bool Resolve(string source, string url, out string? target)
+    private static bool Resolve(string source, string url, out string? target, out bool requiresDirectory)
     {
         target = null;
+        requiresDirectory = false;
         var end = url.IndexOfAny(['#', '?']);
         var raw = end < 0 ? url : url[..end];
         if (raw.Length == 0) return true;
@@ -167,6 +174,7 @@ public static class Inspector
         try { decoded = Uri.UnescapeDataString(raw); }
         catch (UriFormatException) { return false; }
         if (decoded.StartsWith('/') || decoded.Any(c => char.IsControl(c) || "<>:\\|?*".Contains(c))) return false;
+        requiresDirectory = decoded.EndsWith('/') || decoded.Split('/')[^1] is "." or "..";
         var parts = source.Split('/').SkipLast(1).ToList();
         foreach (var part in decoded.Split('/'))
         {

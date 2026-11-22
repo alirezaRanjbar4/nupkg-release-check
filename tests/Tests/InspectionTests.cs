@@ -142,6 +142,19 @@ public sealed class InspectionTests : IDisposable
     }
 
     [Fact]
+    public void TrailingSlashCannotResolveToARegularFile()
+    {
+        Assert.Contains(Inspector.Inspect(Package(readme: "[Bad](README.md/)\n")).Diagnostics, row => row.Code == "NRC006");
+    }
+
+    [Fact]
+    public void NuspecReadmeIsALiteralArchivePathRatherThanAUrl()
+    {
+        var manifest = Manifest.Replace("<readme>README.md</readme>", "<readme>docs/a%20b#c.md</readme>");
+        Assert.Empty(Inspector.Inspect(Package(manifest, extra: [("docs/a%20b#c.md", Encoding.UTF8.GetBytes("# Readme\n"))])).Diagnostics);
+    }
+
+    [Fact]
     public void InvalidUtf8AndOversizedTextProduceBoundedDiagnostics()
     {
         Assert.Contains(Inspector.Inspect(Package(extra: [("docs/bad.md", [0xff, 0xfe])])).Diagnostics, row => row.Code == "NRC007");
