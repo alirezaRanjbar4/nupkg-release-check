@@ -8,10 +8,10 @@ public static class Application
     {
         if (args is ["--help"] or ["-h"])
         {
-            output.WriteLine("nupkg-release-check package.nupkg [--expect-id ID] [--expect-version VERSION] [--expect-commit FULL_GIT_HASH] [--format text|json] [--strict]\nOffline manifest expectations and package-local Markdown links. No extraction, installation or network requests. Exit: 0 pass, 1 findings (warnings only with --strict), 2 arguments or file error.");
+            output.WriteLine("nupkg-release-check package.nupkg [--expect-id ID] [--expect-version VERSION] [--expect-commit FULL_GIT_HASH] [--policy policy.json] [--format text|json] [--strict]\nOffline manifest expectations, required files/SHA-256 policy and package-local Markdown links. No extraction, installation or network requests. Exit: 0 pass, 1 findings (warnings only with --strict), 2 arguments, policy or file error.");
             return 0;
         }
-        if (args is ["--version"]) { output.WriteLine("0.1.0"); return 0; }
+        if (args is ["--version"]) { output.WriteLine("0.2.0"); return 0; }
         try
         {
             if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]) || args[0].StartsWith('-')) throw new InputException("Pass one package path first; see --help.");
@@ -21,13 +21,13 @@ public static class Application
             {
                 var key = args[i];
                 if (key == "--strict") { if (strict) throw new InputException("Repeated option."); strict = true; continue; }
-                if (key is not ("--expect-id" or "--expect-version" or "--expect-commit" or "--format")) throw new InputException("Unknown argument; see --help.");
+                if (key is not ("--expect-id" or "--expect-version" or "--expect-commit" or "--policy" or "--format")) throw new InputException("Unknown argument; see --help.");
                 if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]) || args[i].StartsWith("--", StringComparison.Ordinal)) throw new InputException("Option requires a nonblank value.");
                 if (!values.TryAdd(key, args[i])) throw new InputException("Repeated option.");
             }
             var format = values.GetValueOrDefault("--format", "text");
             if (format is not ("text" or "json")) throw new InputException("Format must be text or json.");
-            var report = Inspector.Inspect(args[0], values.GetValueOrDefault("--expect-id"), values.GetValueOrDefault("--expect-version"), values.GetValueOrDefault("--expect-commit"));
+            var report = Inspector.Inspect(args[0], values.GetValueOrDefault("--expect-id"), values.GetValueOrDefault("--expect-version"), values.GetValueOrDefault("--expect-commit"), values.GetValueOrDefault("--policy"));
             if (format == "json") output.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
             else
             {
@@ -35,11 +35,12 @@ public static class Application
                     output.WriteLine($"{finding.Code} {finding.Severity} {JsonSerializer.Serialize(finding.Entry)}{(finding.Line is { } line ? $":{line}" : "")}: {finding.Message}" +
                         (finding.Target is { } target ? $" Target: {JsonSerializer.Serialize(target)}" : ""));
                 output.WriteLine($"Checked {report.EntriesChecked} archive entries, {report.MarkdownFilesChecked} Markdown files, {report.LocalLinksChecked} local links: {report.Errors} error(s), {report.Warnings} warning(s).");
+                if (report.PolicySha256 is not null) output.WriteLine($"Policy SHA-256: {report.PolicySha256}; checked {report.RequiredFilesChecked} required files and {report.FileHashesChecked} file hashes.");
             }
             return report.Errors > 0 || (strict && report.Warnings > 0) ? 1 : 0;
         }
         catch (InputException exception) { error.WriteLine(exception.Message); return 2; }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
-        { error.WriteLine("Package could not be read. Check the path, permissions and arguments."); return 2; }
+        { error.WriteLine("Package or policy could not be read. Check paths, permissions and arguments."); return 2; }
     }
 }

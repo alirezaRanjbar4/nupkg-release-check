@@ -13,7 +13,7 @@ public sealed class InputException(string message) : Exception(message);
 public sealed record Finding(string Code, string Severity, string? Entry, int? Line, string Message, string? Target = null);
 public sealed record PackageReport(int SchemaVersion, string Package, string? PackageSha256, string? PackageId,
     string? Version, string? RepositoryCommit, int EntriesChecked, int MarkdownFilesChecked, int LocalLinksChecked,
-    IReadOnlyList<Finding> Diagnostics)
+    IReadOnlyList<Finding> Diagnostics, string? PolicySha256 = null, int RequiredFilesChecked = 0, int FileHashesChecked = 0)
 {
     public int Errors => Diagnostics.Count(row => row.Severity == "error");
     public int Warnings => Diagnostics.Count(row => row.Severity == "warning");
@@ -26,9 +26,11 @@ public static class Inspector
     private const int MaxTextBytes = 2 * 1024 * 1024;
     private const int MaxTotalTextBytes = 16 * 1024 * 1024;
     private const int MaxLinks = 100_000;
+    private const long MaxHashBytes = 64L * 1024 * 1024;
+    private const long MaxTotalHashBytes = 256L * 1024 * 1024;
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UsePreciseSourceLocation().Build();
 
-    public static PackageReport Inspect(string path, string? expectedId = null, string? expectedVersion = null, string? expectedCommit = null)
+    public static PackageReport Inspect(string path, string? expectedId = null, string? expectedVersion = null, string? expectedCommit = null, string? policyPath = null)
     {
         foreach (var expected in new[] { expectedId, expectedVersion, expectedCommit })
             if (expected is not null && (string.IsNullOrWhiteSpace(expected) || expected.Length > 128))
@@ -36,10 +38,13 @@ public static class Inspector
         if (expectedCommit is not null && (expectedCommit.Length is not (40 or 64) || !expectedCommit.All(Uri.IsHexDigit)))
             throw new InputException("Expected commit must be a full 40- or 64-character hexadecimal Git hash.");
 
+        // Validate the entire policy before opening or inspecting the package.
+        var policy = policyPath is null ? null : ReleasePolicy.Load(policyPath);
         var findings = new List<Finding>();
         string? hash = null, id = null, version = null, commit = null;
         var entryCount = 0; var markdownCount = 0; var linkCount = 0; var textBytes = 0;
-        PackageReport Report() => new(1, path, hash, id, version, commit, entryCount, markdownCount, linkCount, findings.ToArray());
+        var requiredCount = 0; var hashCount = 0; long hashBytes = 0;
+        PackageReport Report() => new(1, path, hash, id, version, commit, entryCount, markdownCount, linkCount, findings.ToArray(), policy?.Sha256, requiredCount, hashCount);
         void Error(string code, string? entry, string message, int? line = null, string? target = null) => findings.Add(new(code, "error", entry, line, message, target));
 
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -72,6 +77,34 @@ public static class Inspector
                 }
             }
             if (findings.Count > 0) return Report();
+            foreach (var required in policy?.RequiredFiles ?? [])
+            {
+                requiredCount++;
+                if (!files.TryGetValue(required.Path, out var entry))
+                { Error("NRC008", required.Path, "Required policy file is missing from the archive (case-sensitive)."); continue; }
+                if (required.Sha256 is null) continue;
+                if (entry.Length > MaxHashBytes || entry.Length > MaxTotalHashBytes - hashBytes)
+                { Error("NRC010", entry.FullName, "Policy hashing exceeds the 64 MiB per-file or 256 MiB total decompression limit."); continue; }
+                using var input = entry.Open();
+                using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                var buffer = new byte[8192];
+                long entryBytes = 0;
+                int read;
+                var exceeded = false;
+                while ((read = input.Read(buffer)) > 0)
+                {
+                    entryBytes += read;
+                    hashBytes += read;
+                    if (entryBytes > MaxHashBytes || hashBytes > MaxTotalHashBytes)
+                    { Error("NRC010", entry.FullName, "Decompressed policy payload exceeds the hashing limit."); exceeded = true; break; }
+                    digest.AppendData(buffer, 0, read);
+                }
+                if (exceeded) continue;
+                if (entryBytes != entry.Length) throw new InvalidDataException();
+                hashCount++;
+                var actual = Convert.ToHexString(digest.GetHashAndReset()).ToLowerInvariant();
+                if (actual != required.Sha256) Error("NRC009", entry.FullName, "File SHA-256 does not match the supplied policy expectation.");
+            }
             var manifests = files.Values.Where(entry => !entry.FullName.Contains('/') && entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)).ToArray();
             if (manifests.Length != 1) { Error("NRC002", null, "Expected exactly one root nuspec file."); return Report(); }
             var manifest = manifests[0];
@@ -159,7 +192,7 @@ public static class Inspector
         return Report();
     }
 
-    private static bool SafeArchivePath(string path) => path.Length > 0 && !path.StartsWith('/') &&
+    internal static bool SafeArchivePath(string path) => path.Length > 0 && !path.StartsWith('/') &&
         !path.Any(c => char.IsControl(c) || "<>:\\|?*".Contains(c)) &&
         path.Split('/').All(segment => segment.Length > 0 && segment is not ("." or ".."));
 
