@@ -2,9 +2,9 @@
 
 ## Inspection pipeline
 
-1. Open one read-only file handle. Reject files above 512 MiB, compute SHA-256, then rewind the same handle.
+1. Validate an optional [release policy](POLICY.md), including strict schema, paths and digests, before opening the package. Open one read-only package handle. Reject files above 512 MiB, compute SHA-256, then rewind the same handle.
 2. Read ZIP metadata, with at most 10,000 entries. Reject rooted paths, dot/traversal segments, empty interior segments, control characters, Windows path separators/reserved punctuation, exact duplicates and case collisions. No entries are extracted.
-3. Require exactly one root `.nuspec`. Read bounded bytes and parse XML with DTD processing prohibited and the resolver disabled. Require one metadata block, a nonblank ID/version and no duplicate ID/version/repository/readme fields. This is a deliberately small structural check, not a complete nuspec validator.
+3. Check optional policy requirements in their supplied order. Require exact file paths; stream requested SHA-256 payloads within per-file/total decompression limits. Then require exactly one root `.nuspec`. Read bounded bytes and parse XML with DTD processing prohibited and the resolver disabled. Require one metadata block, a nonblank ID/version and no duplicate ID/version/repository/readme fields. This is a deliberately small structural check, not a complete nuspec validator.
 4. Compare explicitly provided metadata expectations. Verify the declared readme's archive path. Missing optional commit/readme metadata produces warnings; explicit mismatches are errors.
 5. Parse all bundled `.md` files with Markdig's CommonMark parser, in ordinal path order. Resolve link/image/reference-link destinations against their source directory and the archive index. Return diagnostics without modifying the package.
 
@@ -20,11 +20,11 @@ Only CommonMark link nodes are inspected. Raw HTML, custom documentation extensi
 
 ## Resource bounds and errors
 
-Text entries (nuspec plus Markdown) are limited to 2 MiB each and 16 MiB total decompressed bytes. There is also a 100,000 local-link limit. Both declared and observed decompressed text lengths are checked. Binary payloads are indexed but not decompressed or executed; archive hashing reads compressed bytes. A large valid package may be refused by these inspection limits.
+Text entries (nuspec plus Markdown) are limited to 2 MiB each and 16 MiB total decompressed bytes. There is also a 100,000 local-link limit. Both declared and observed decompressed text lengths are checked. Without a hash requirement binary payloads are only indexed; policy hashing streams only requested entries with separate 64 MiB per-file and 256 MiB total bounds. No payload is executed. Archive hashing reads compressed bytes. Policy input is at most 256 KiB, depth 8 and 1,000 requirements. See the [policy contract](POLICY.md) for exact counters, path rules and trust limits. A large valid package may be refused by these inspection limits.
 
 These limits bound common workloads; they are not a sandbox or a general malicious-archive security guarantee. The ZIP central directory is processed by the .NET ZIP reader before its entry count can be checked. Keep external process/time/memory limits for untrusted inputs. Do not modify the input concurrently; the report's hash describes the bytes read, not a filesystem snapshot guarantee across concurrent writes on all platforms.
 
-Invalid archive data yields `NRC001` and exit 1. File access and argument failures yield exit 2. A JSON report is emitted only after an inspection returns; invalid input arguments do not produce a partial JSON object. Diagnostic codes and exit meanings are stable in 0.x; `schemaVersion` marks breaking JSON schema changes. New diagnostic rows may be added.
+Invalid archive data yields `NRC001` and exit 1. File access, policy and argument failures yield exit 2. A JSON report is emitted only after an inspection returns; invalid input arguments do not produce a partial JSON object. Diagnostic codes and exit meanings are stable in 0.x; `schemaVersion` marks breaking JSON schema changes. New diagnostic rows may be added.
 
 ## Trust boundary
 

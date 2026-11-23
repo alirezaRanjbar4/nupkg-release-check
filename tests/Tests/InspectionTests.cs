@@ -194,6 +194,8 @@ public sealed class InspectionTests : IDisposable
     [InlineData("--format yaml")]
     [InlineData("--strict --strict")]
     [InlineData("--expect-id A --expect-id B")]
+    [InlineData("--policy")]
+    [InlineData("--policy a --policy b")]
     [InlineData("extra.nupkg")]
     public void InvalidArgumentsReturnTwo(string arguments)
     {
@@ -204,7 +206,7 @@ public sealed class InspectionTests : IDisposable
     [Fact]
     public void VersionAndHelpAreAvailableWithoutAFile()
     {
-        Assert.Equal("0.1.0", Run(["--version"]).Output.Trim());
+        Assert.Equal("0.2.0", Run(["--version"]).Output.Trim());
         Assert.Equal(0, Run(["--help"]).Code);
     }
 

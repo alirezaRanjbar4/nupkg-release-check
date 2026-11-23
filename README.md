@@ -4,6 +4,8 @@
 
 An offline C#/.NET 10 command-line check for the **final `.nupkg` you intend to release**. Assert its package ID, exact version and Git commit, and find relative Markdown links whose targets were left out of the archive.
 
+Source version 0.2.0 also supports an explicit required-file/SHA-256 [release policy](docs/POLICY.md), including detection of changed payload bytes even when commit metadata is unchanged. That workflow is not in the published 0.1.0 release; build from source until the closing release is published.
+
 A repository README can work on GitHub while the packaged README points at missing guides. A package built before the release commit can also contain an older `repository@commit`. This tool checks the archive itself against expectations you supply. It reads the package without extracting files, installing its contents or making network requests.
 
 ## Try it from source
@@ -40,7 +42,7 @@ After committing the source, pack it, then check that final artifact. In a Power
 ```powershell
 $commit = git rev-parse HEAD
 dotnet pack src/Cli -c Release -o artifacts
-./artifacts/tool/nupkg-release-check artifacts/NupkgReleaseCheck.Tool.0.1.0.nupkg --expect-id NupkgReleaseCheck.Tool --expect-version 0.1.0 --expect-commit $commit --strict --format json
+dotnet run --project src/Cli -c Release -- artifacts/NupkgReleaseCheck.Tool.0.2.0.nupkg --expect-id NupkgReleaseCheck.Tool --expect-version 0.2.0 --expect-commit $commit --strict --format json
 ```
 
 Use the expected commit from the trusted build context. An archive's own metadata is self-reported. Matching it does not prove how a DLL was built. The CI workflow also tests, formats, packs, installs from the local feed and runs examples on Windows, Linux and macOS.
@@ -56,16 +58,21 @@ Use the expected commit from the trusted build context. An archive's own metadat
 | `NRC005` | Declared readme exists inside the archive | Error if missing target; warning if no readme declared |
 | `NRC006` | Package-local CommonMark links/images/reference links resolve | Error |
 | `NRC007` | Valid UTF-8 Markdown and bounded text/link processing | Error |
+| `NRC008` | Required policy file is absent or has the wrong case | Error |
+| `NRC009` | Required file's expected SHA-256 differs | Error |
+| `NRC010` | Policy file-hashing decompression limit | Error |
 
 ID and commit comparisons ignore case; version comparison is exact, with no NuGet version normalization. Local paths are case-sensitive on every OS. References inside code spans/fences are ignored. Directory links are accepted when the directory exists explicitly or has archived children. See the [design and limits](docs/DESIGN.md) for URL handling and size limits.
 
 `--format text` is the default. `--format json` emits a single report on stdout with `schemaVersion: 1`, package SHA-256, observed metadata, counts and diagnostics. Findings include an archive `entry`, a one-based Markdown `line` when applicable, and a normalized `target` for missing links. The report contains paths and metadata; review them before sharing. Nuspec/Markdown bodies are not echoed.
 
+In source 0.2.0, `--policy path.json` validates a strict versioned input before opening the package, checks required files and hashes only requested payloads. JSON adds the original `policySha256`, `requiredFilesChecked` and `fileHashesChecked`; see the [full policy contract and runnable examples](docs/POLICY.md). Package and policy are read-only. Supplied digests check expectations and do not attest binary provenance.
+
 | Exit | Meaning |
 | --- | --- |
 | `0` | No errors; warnings permitted unless `--strict` |
 | `1` | Inspection errors, or warnings with `--strict` |
-| `2` | Invalid arguments, unreadable/missing file; message on stderr, no report |
+| `2` | Invalid arguments/policy, unreadable/missing file; message on stderr, no report |
 
 The tool checks neither heading anchors, remote URLs, HTML links, full nuspec schema/SemVer validity, signatures, API compatibility, binary provenance nor vulnerabilities. It complements existing validators; [research and alternatives](docs/RESEARCH.md) explain the scope. No AI service or key is needed.
 

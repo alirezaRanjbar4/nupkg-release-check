@@ -6,9 +6,9 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>nupkg-release-check</ToolCommandName>
     <PackageId>NupkgReleaseCheck.Tool</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>alirezaRanjbar4</Authors>
-    <Description>Offline checks for NuGet release identity, commit metadata and package-local Markdown links.</Description>
+    <Description>Offline checks for NuGet release identity, required payloads/SHA-256 and package-local Markdown links.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/alirezaRanjbar4/nupkg-release-check</RepositoryUrl>
