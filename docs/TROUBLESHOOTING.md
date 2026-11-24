@@ -20,7 +20,7 @@ Missing nuspec readme or repository commit metadata is a warning without an expl
 
 Check the file path, file access and CLI options. Put the package path first, give each option exactly once and use `--format text` or `--format json`. Read stderr. `--help` and `--version` run without a package.
 
-For `--policy`, use source 0.2.0; the published 0.1.0 tool lacks this option. Unknown/duplicate fields, case-colliding/unsafe paths, null digests and unsupported schema versions are errors. The [policy contract](POLICY.md) includes the exact strict JSON structure and size limits. Policy validation completes before package inspection, so fix that input first.
+For `--policy`, use version 0.2.0; the earlier 0.1.0 tool lacks this option. Unknown/duplicate fields, case-colliding/unsafe paths, null digests and unsupported schema versions are errors. The [policy contract](POLICY.md) includes the exact strict JSON structure and size limits. Policy validation completes before package inspection, so fix that input first.
 
 ## Missing or changed policy payloads
 

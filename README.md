@@ -4,7 +4,7 @@
 
 An offline C#/.NET 10 command-line check for the **final `.nupkg` you intend to release**. Assert its package ID, exact version and Git commit, and find relative Markdown links whose targets were left out of the archive.
 
-Source version 0.2.0 also supports an explicit required-file/SHA-256 [release policy](docs/POLICY.md), including detection of changed payload bytes even when commit metadata is unchanged. That workflow is not in the published 0.1.0 release; build from source until the closing release is published.
+Version 0.2.0 also supports an explicit required-file/SHA-256 [release policy](docs/POLICY.md), including detection of changed payload bytes even when commit metadata is unchanged. The earlier v0.1.0 release does not include this workflow.
 
 A repository README can work on GitHub while the packaged README points at missing guides. A package built before the release commit can also contain an older `repository@commit`. This tool checks the archive itself against expectations you supply. It reads the package without extracting files, installing its contents or making network requests.
 
@@ -25,11 +25,11 @@ The good example exits `0`. The bad example deliberately leaves out `docs/guide.
 
 Packages are distributed as [GitHub Release assets](https://github.com/alirezaRanjbar4/nupkg-release-check/releases), **not on NuGet.org**. The .NET 10 runtime is required for the installed tool; an SDK is needed for `dotnet tool install`.
 
-From a checkout, download `NupkgReleaseCheck.Tool.0.1.0.nupkg` and `SHA256SUMS.txt` from release `v0.1.0` into `artifacts/`. The optional GitHub CLI command is:
+From a checkout, download `NupkgReleaseCheck.Tool.0.2.0.nupkg` and `SHA256SUMS.txt` from release `v0.2.0` into `artifacts/`. The optional GitHub CLI command is:
 
 ```sh
-gh release download v0.1.0 --repo alirezaRanjbar4/nupkg-release-check --dir artifacts
-dotnet tool install NupkgReleaseCheck.Tool --version 0.1.0 --tool-path artifacts/tool --configfile nuget.local.config --no-cache
+gh release download v0.2.0 --repo alirezaRanjbar4/nupkg-release-check --dir artifacts
+dotnet tool install NupkgReleaseCheck.Tool --version 0.2.0 --tool-path artifacts/tool --configfile nuget.local.config --no-cache
 ./artifacts/tool/nupkg-release-check --version
 ```
 
@@ -66,7 +66,7 @@ ID and commit comparisons ignore case; version comparison is exact, with no NuGe
 
 `--format text` is the default. `--format json` emits a single report on stdout with `schemaVersion: 1`, package SHA-256, observed metadata, counts and diagnostics. Findings include an archive `entry`, a one-based Markdown `line` when applicable, and a normalized `target` for missing links. The report contains paths and metadata; review them before sharing. Nuspec/Markdown bodies are not echoed.
 
-In source 0.2.0, `--policy path.json` validates a strict versioned input before opening the package, checks required files and hashes only requested payloads. JSON adds the original `policySha256`, `requiredFilesChecked` and `fileHashesChecked`; see the [full policy contract and runnable examples](docs/POLICY.md). Package and policy are read-only. Supplied digests check expectations and do not attest binary provenance.
+In 0.2.0, `--policy path.json` validates a strict versioned input before opening the package, checks required files and hashes only requested payloads. JSON adds the original `policySha256`, `requiredFilesChecked` and `fileHashesChecked`; see the [full policy contract and runnable examples](docs/POLICY.md). Package and policy are read-only. Supplied digests check expectations and do not attest binary provenance.
 
 | Exit | Meaning |
 | --- | --- |
