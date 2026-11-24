@@ -1,6 +1,6 @@
 # Required files and SHA-256 policy
 
-This workflow is available in source version 0.2.0. The published 0.1.0 tool does not accept `--policy`; build from source until the closing release is published.
+This workflow is available in version 0.2.0. The earlier 0.1.0 tool does not accept `--policy`.
 
 ## Contract
 
